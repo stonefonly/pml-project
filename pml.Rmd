@@ -1,0 +1,78 @@
+---
+title: "Predicting the manner of exercise using data from wearable devices"
+author: "Chao"
+date: "Jul 20, 2015"
+output: html_document
+---
+
+## Background
+
+Wearable devices can collect a large amount of data using the built-in sensors. People often quantify how much of a particular activity they do, but they often ignore how well they do it. In this project, data from accelerometers of 6 participants are used to predict the manner in which they did the exercise. With the final model, an accuracy of 0.9587 is achieved.
+
+## Get and clean data
+
+```{r}
+data=read.csv('./pml-training.csv',stringsAsFactors=F)
+str(data)
+
+data$classe=as.factor(data$classe)
+data=data[,-c(1:7)]
+```
+First, the data is loaded and the structure is shown:
+
+* The "classe" variable, which indicates the manner of exercise, is converted to factors after loading.
+* The first 7 variables are metadata, and not directly related with the sensor readings. Thus they are removed.
+
+```{r}
+idx=which(apply(is.na(data),2,mean)>0.10)
+data=data[,-idx]
+sum(apply(is.na(data),2,any))
+
+require(caret)
+idx=nearZeroVar(data)
+data=data[,-idx]
+```
+Second, it can be found that:
+
+* The data is very high dimensional (a lot variables).
+* There are many variables with a lot "NA" values. 
+
+The following methods are used to remove the useless variables:
+
+* Variables with more than 10% NA values are removed. After this, the rest variables contain no NA values.
+* Variables with near zero variance are removed.
+
+After these steps, there are 52 variables left (except for "classe"). These variables will be used for modeling below.
+
+## Modeling and error estimation
+
+```{r}
+inTrain=createDataPartition(data$classe,p=0.6,list=F)
+train=data[inTrain,]
+test =data[-inTrain,]
+```
+First, the dataset is split into "train" (60%) and "test" (40%) sets. The "train" set will be used to build the model while the "test" set will be used to estimate the out-of-sample error.
+
+```{r,eval=FALSE}
+require(gbm)
+require(doMC)
+registerDoMC(cores = 2)
+model=train(classe~.,method='gbm',data=train,verbose=F)
+```
+
+```{r,echo=FALSE}
+load('./pml.Rdata')
+```
+Second, a gradient boosting machine (GBM) model is fit using the "train" set as GBM is usually one of the most accurate methods. The modeling process uses multi cores to reduce the computation time.
+
+```{r}
+confusionMatrix(predict(model,test),test$classe)
+```
+Third, the predicting ability of the model is assessed by the "test" set. The out-of-sample accuracy is determined to be 0.9587, which is pretty good.
+
+The prediction ability could be further improved by combining multiple models. However:
+
+* It is not very necessary for this project as the accuracy of GBM alone is already 0.9587.
+* Computational resource is limited with my own laptop.
+
+The GBM model is then used to predict the 20 different test cases for submission, which is irrelevant and thus not included in this report.
