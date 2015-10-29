@@ -67,9 +67,9 @@ img {
 </div>
 
 
-<div id="background" class="section level2">
-<h2>Background</h2>
-<p>Wearable devices can collect a large amount of data using the built-in sensors. People often quantify how much of a particular activity they do, but they often ignore how well they do it. In this project, data from accelerometers of 6 participants are used to predict the manner in which they did the exercise. With the final model, an accuracy of 0.9587 is achieved.</p>
+<div id="project-summary" class="section level2">
+<h2>Project summary</h2>
+<p>Wearable devices can collect a large amount of data using the built-in sensors. People often quantify how much of a particular activity they do, but they often ignore how well they do it. In this project, data from accelerometers of 6 participants were used to predict the manner in which they did the exercise. Several test models (Random Forest, Stochastic Gradient Boosting, and Linear Discriminant Analysis) were built and compared by cross validation. The test model with highest accuracy was Random Forest (0.9925), and thus the final model was built using Random Forest method. With the final model, all 20 unknown samples were predicted successfully.</p>
 </div>
 <div id="get-and-clean-data" class="section level2">
 <h2>Get and clean data</h2>
@@ -176,14 +176,17 @@ str(data)</code></pre>
 ##  $ min_yaw_dumbbell        : chr  &quot;&quot; &quot;&quot; &quot;&quot; &quot;&quot; ...
 ##  $ amplitude_roll_dumbbell : num  NA NA NA NA NA NA NA NA NA NA ...
 ##   [list output truncated]</code></pre>
-<pre class="r"><code>data$classe=as.factor(data$classe)
-data=data[,-c(1:7)]</code></pre>
-<p>First, the data is loaded and the structure is shown:</p>
+<p>First, the dataset was loaded and the structure was investigated. it can be found that:</p>
 <ul>
-<li>The “classe” variable, which indicates the manner of exercise, is converted to factors after loading.</li>
-<li>The first 7 variables are metadata, and not directly related with the sensor readings. Thus they are removed.</li>
+<li>The data is very high dimensional (a lot variables).</li>
+<li>The variable corresponding to exercise manner is “classe” which has a data type of “character”.</li>
+<li>Some variables are metadata, e.g. user name, time stamp, etc.</li>
+<li>There are many variables with a lot “NA” values, which may cause problems during modeling process.</li>
 </ul>
-<pre class="r"><code>idx=which(apply(is.na(data),2,mean)&gt;0.10)
+<pre class="r"><code>data$classe=as.factor(data$classe)
+data=data[,-c(1:7)]
+
+idx=which(apply(is.na(data),2,mean)&gt;0.10)
 data=data[,-idx]
 sum(apply(is.na(data),2,any))</code></pre>
 <pre><code>## [1] 0</code></pre>
@@ -193,30 +196,64 @@ sum(apply(is.na(data),2,any))</code></pre>
 ## Loading required package: ggplot2</code></pre>
 <pre class="r"><code>idx=nearZeroVar(data)
 data=data[,-idx]</code></pre>
-<p>Second, it can be found that:</p>
+<p>To fix the problems of the data, the following operations were performed:</p>
 <ul>
-<li>The data is very high dimensional (a lot variables).</li>
-<li>There are many variables with a lot “NA” values.</li>
+<li>The “classe” variable, which indicates the manner of exercise, was converted to factors.</li>
+<li>The first 7 variables are metadata, and not directly related with the sensor readings. Thus they were removed.</li>
+<li>Variables with more than 10% NA values were removed. The remaining variables contain no NA values.</li>
+<li>Variables with near zero variance were removed.</li>
 </ul>
-<p>The following methods are used to remove the useless variables:</p>
-<ul>
-<li>Variables with more than 10% NA values are removed. After this, the rest variables contain no NA values.</li>
-<li>Variables with near zero variance are removed.</li>
-</ul>
-<p>After these steps, there are 52 variables left (except for “classe”). These variables will be used for modeling below.</p>
+<p>After these steps, there are 52 variables left (except for “classe”). These variables were used for the following modeling tests.</p>
 </div>
-<div id="modeling-and-error-estimation" class="section level2">
-<h2>Modeling and error estimation</h2>
+<div id="modeling-and-cross-validation" class="section level2">
+<h2>Modeling and cross validation</h2>
 <pre class="r"><code>inTrain=createDataPartition(data$classe,p=0.6,list=F)
-train=data[inTrain,]
-test =data[-inTrain,]</code></pre>
-<p>First, the dataset is split into “train” (60%) and “test” (40%) sets. The “train” set will be used to build the model while the “test” set will be used to estimate the out-of-sample error.</p>
+mytrain=data[inTrain,]
+mytest =data[-inTrain,]</code></pre>
+<p>Before any modeling process, The dataset was split into “mytrain” (60%) and “mytest” (40%) sets. The “mytrain” set was used to build the models while the “mytest” set was used to estimate the out-of-sample errors.</p>
 <pre class="r"><code>require(gbm)
 require(doMC)
-registerDoMC(cores = 2)
-model=train(classe~.,method='gbm',data=train,verbose=F)</code></pre>
-<p>Second, a gradient boosting machine (GBM) model is fit using the “train” set as GBM is usually one of the most accurate methods. The modeling process uses multi cores to reduce the computation time.</p>
-<pre class="r"><code>confusionMatrix(predict(model,test),test$classe)</code></pre>
+registerDoMC(cores=4)</code></pre>
+<p>To speed up the following modeling processes, multi-core support was turned on.</p>
+<pre class="r"><code>mod1=train(classe~.,method='rf',data=mytrain,verbose=F)</code></pre>
+<pre class="r"><code>confusionMatrix(predict(mod1,mytest),mytest$classe)</code></pre>
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 2231   11    0    0    2
+##          B    0 1501   13    0    1
+##          C    1    6 1347   10    2
+##          D    0    0    8 1275    4
+##          E    0    0    0    1 1433
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9925          
+##                  95% CI : (0.9903, 0.9943)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9905          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9996   0.9888   0.9846   0.9914   0.9938
+## Specificity            0.9977   0.9978   0.9971   0.9982   0.9998
+## Pos Pred Value         0.9942   0.9908   0.9861   0.9907   0.9993
+## Neg Pred Value         0.9998   0.9973   0.9968   0.9983   0.9986
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2843   0.1913   0.1717   0.1625   0.1826
+## Detection Prevalence   0.2860   0.1931   0.1741   0.1640   0.1828
+## Balanced Accuracy      0.9986   0.9933   0.9909   0.9948   0.9968</code></pre>
+<p>First, a Random Forest (RF) model was built and the out-of-sample accuracy was 0.9925.</p>
+<pre class="r"><code>mod2=train(classe~.,method='gbm',data=mytrain,verbose=F)</code></pre>
+<pre class="r"><code>confusionMatrix(predict(mod2,mytest),mytest$classe)</code></pre>
 <pre><code>## Loading required package: gbm
 ## Loading required package: survival
 ## 
@@ -234,40 +271,87 @@ model=train(classe~.,method='gbm',data=train,verbose=F)</code></pre>
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 2203   58    0    3    3
-##          B   16 1408   49    7   10
-##          C    9   46 1297   46    9
-##          D    3    2   18 1219   25
-##          E    1    4    4   11 1395
+##          A 2201   46    0    0    1
+##          B   19 1417   43    5   23
+##          C    8   47 1300   32   11
+##          D    4    2   25 1245   19
+##          E    0    6    0    4 1388
 ## 
 ## Overall Statistics
 ##                                          
-##                Accuracy : 0.9587         
-##                  95% CI : (0.9541, 0.963)
+##                Accuracy : 0.9624         
+##                  95% CI : (0.958, 0.9665)
 ##     No Information Rate : 0.2845         
 ##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16      
 ##                                          
-##                   Kappa : 0.9477         
-##  Mcnemar's Test P-Value : 5.851e-09      
+##                   Kappa : 0.9524         
+##  Mcnemar's Test P-Value : 1.177e-08      
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9870   0.9275   0.9481   0.9479   0.9674
-## Specificity            0.9886   0.9870   0.9830   0.9927   0.9969
-## Pos Pred Value         0.9718   0.9450   0.9218   0.9621   0.9859
-## Neg Pred Value         0.9948   0.9827   0.9890   0.9898   0.9927
+## Sensitivity            0.9861   0.9335   0.9503   0.9681   0.9626
+## Specificity            0.9916   0.9858   0.9849   0.9924   0.9984
+## Pos Pred Value         0.9791   0.9403   0.9299   0.9614   0.9928
+## Neg Pred Value         0.9945   0.9841   0.9895   0.9937   0.9916
 ## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
-## Detection Rate         0.2808   0.1795   0.1653   0.1554   0.1778
-## Detection Prevalence   0.2889   0.1899   0.1793   0.1615   0.1803
-## Balanced Accuracy      0.9878   0.9573   0.9656   0.9703   0.9821</code></pre>
-<p>Third, the predicting ability of the model is assessed by the “test” set. The out-of-sample accuracy is determined to be 0.9587, which is pretty good.</p>
-<p>The prediction ability could be further improved by combining multiple models. However:</p>
-<ul>
-<li>It is not very necessary for this project as the accuracy of GBM alone is already 0.9587.</li>
-<li>Computational resource is limited with my own laptop.</li>
-</ul>
-<p>The GBM model is then used to predict the 20 different test cases for submission, which is irrelevant and thus not included in this report.</p>
+## Detection Rate         0.2805   0.1806   0.1657   0.1587   0.1769
+## Detection Prevalence   0.2865   0.1921   0.1782   0.1651   0.1782
+## Balanced Accuracy      0.9889   0.9596   0.9676   0.9802   0.9805</code></pre>
+<p>Second, a Stochastic Gradient Boosting (GBM) model was fit and the out-of-sample accuracy was 0.9624.</p>
+<pre class="r"><code>mod3=train(classe~.,method='lda',data=mytrain,verbose=F)</code></pre>
+<pre class="r"><code>confusionMatrix(predict(mod3,mytest),mytest$classe)</code></pre>
+<pre><code>## Loading required package: MASS</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1817  242  132   81   45
+##          B   49  973  127   55  274
+##          C  191  176  912  156  136
+##          D  166   61  157  922  158
+##          E    9   66   40   72  829
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.695           
+##                  95% CI : (0.6847, 0.7052)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.6141          
+##  Mcnemar's Test P-Value : &lt; 2.2e-16       
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.8141   0.6410   0.6667   0.7170   0.5749
+## Specificity            0.9109   0.9202   0.8983   0.9174   0.9708
+## Pos Pred Value         0.7842   0.6583   0.5805   0.6298   0.8159
+## Neg Pred Value         0.9249   0.9144   0.9273   0.9430   0.9102
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2316   0.1240   0.1162   0.1175   0.1057
+## Detection Prevalence   0.2953   0.1884   0.2002   0.1866   0.1295
+## Balanced Accuracy      0.8625   0.7806   0.7825   0.8172   0.7728</code></pre>
+<p>Third, a Linear Discriminant Analysis (LDA) model was generated and the out-of-sample accuracy was 0.695.</p>
+<p>The Random Forest model showed highest accuracy (0.9925) among all three models. The prediction ability may be further improved by combining multiple models (classifiers) into one; however it was not very necessary for this project as the accuracy of Random Forest alone was already 0.9925 and the computational resource of my own PC was limited. Thus the final model was built using Random Forest method.</p>
+<pre class="r"><code>model=train(classe~.,method='rf',data=data,verbose=F)</code></pre>
+<pre class="r"><code>unkn = read.csv('./pml-testing.csv')
+pred = predict(model,unkn)
+pred</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
+<p>With the final model, all 20 unknown samples were predicted. All these predictions were found correct later after submission.</p>
+<pre class="r"><code>pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0(&quot;problem_id_&quot;,i,&quot;.txt&quot;)
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(pred)</code></pre>
+<p>The predictions were output to individual files as requested for submission.</p>
+<p>EOF</p>
 </div>
 
 

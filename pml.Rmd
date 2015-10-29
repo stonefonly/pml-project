@@ -5,25 +5,27 @@ date: "Jul 20, 2015"
 output: html_document
 ---
 
-## Background
+## Project summary
 
-Wearable devices can collect a large amount of data using the built-in sensors. People often quantify how much of a particular activity they do, but they often ignore how well they do it. In this project, data from accelerometers of 6 participants are used to predict the manner in which they did the exercise. With the final model, an accuracy of 0.9587 is achieved.
+Wearable devices can collect a large amount of data using the built-in sensors. People often quantify how much of a particular activity they do, but they often ignore how well they do it. In this project, data from accelerometers of 6 participants were used to predict the manner in which they did the exercise. Several test models (Random Forest, Stochastic Gradient Boosting, and Linear Discriminant Analysis) were built and compared by cross validation. The test model with highest accuracy was Random Forest (0.9925), and thus the final model was built using Random Forest method. With the final model, all 20 unknown samples were predicted successfully.
 
 ## Get and clean data
 
 ```{r}
 data=read.csv('./pml-training.csv',stringsAsFactors=F)
 str(data)
-
-data$classe=as.factor(data$classe)
-data=data[,-c(1:7)]
 ```
-First, the data is loaded and the structure is shown:
+First, the dataset was loaded and the structure was investigated. it can be found that:
 
-* The "classe" variable, which indicates the manner of exercise, is converted to factors after loading.
-* The first 7 variables are metadata, and not directly related with the sensor readings. Thus they are removed.
+* The data is very high dimensional (a lot variables).
+* The variable corresponding to exercise manner is "classe" which has a data type of "character".
+* Some variables are metadata, e.g. user name, time stamp, etc.
+* There are many variables with a lot "NA" values, which may cause problems during modeling process.
 
 ```{r}
+data$classe=as.factor(data$classe)
+data=data[,-c(1:7)]
+
 idx=which(apply(is.na(data),2,mean)>0.10)
 data=data[,-idx]
 sum(apply(is.na(data),2,any))
@@ -32,47 +34,85 @@ require(caret)
 idx=nearZeroVar(data)
 data=data[,-idx]
 ```
-Second, it can be found that:
+To fix the problems of the data, the following operations were performed: 
 
-* The data is very high dimensional (a lot variables).
-* There are many variables with a lot "NA" values. 
+* The "classe" variable, which indicates the manner of exercise, was converted to factors.
+* The first 7 variables are metadata, and not directly related with the sensor readings. Thus they were removed.
+* Variables with more than 10% NA values were removed. The remaining variables contain no NA values.
+* Variables with near zero variance were removed.
 
-The following methods are used to remove the useless variables:
+After these steps, there are 52 variables left (except for "classe"). These variables were used for the following modeling tests.
 
-* Variables with more than 10% NA values are removed. After this, the rest variables contain no NA values.
-* Variables with near zero variance are removed.
-
-After these steps, there are 52 variables left (except for "classe"). These variables will be used for modeling below.
-
-## Modeling and error estimation
+## Modeling and cross validation
 
 ```{r}
 inTrain=createDataPartition(data$classe,p=0.6,list=F)
-train=data[inTrain,]
-test =data[-inTrain,]
+mytrain=data[inTrain,]
+mytest =data[-inTrain,]
 ```
-First, the dataset is split into "train" (60%) and "test" (40%) sets. The "train" set will be used to build the model while the "test" set will be used to estimate the out-of-sample error.
+Before any modeling process, The dataset was split into "mytrain" (60%) and "mytest" (40%) sets. The "mytrain" set was used to build the models while the "mytest" set was used to estimate the out-of-sample errors.
 
 ```{r,eval=FALSE}
 require(gbm)
 require(doMC)
-registerDoMC(cores = 2)
-model=train(classe~.,method='gbm',data=train,verbose=F)
+registerDoMC(cores=4)
 ```
+To speed up the following modeling processes, multi-core support was turned on.
 
 ```{r,echo=FALSE}
-load('./pml.Rdata')
+load('./pml.RData')
 ```
-Second, a gradient boosting machine (GBM) model is fit using the "train" set as GBM is usually one of the most accurate methods. The modeling process uses multi cores to reduce the computation time.
+
+```{r,eval=FALSE}
+mod1=train(classe~.,method='rf',data=mytrain,verbose=F)
+```
 
 ```{r}
-confusionMatrix(predict(model,test),test$classe)
+confusionMatrix(predict(mod1,mytest),mytest$classe)
 ```
-Third, the predicting ability of the model is assessed by the "test" set. The out-of-sample accuracy is determined to be 0.9587, which is pretty good.
+First, a Random Forest (RF) model was built and the out-of-sample accuracy was 0.9925.
 
-The prediction ability could be further improved by combining multiple models. However:
+```{r,eval=FALSE}
+mod2=train(classe~.,method='gbm',data=mytrain,verbose=F)
+```
 
-* It is not very necessary for this project as the accuracy of GBM alone is already 0.9587.
-* Computational resource is limited with my own laptop.
+```{r}
+confusionMatrix(predict(mod2,mytest),mytest$classe)
+```
+Second, a Stochastic Gradient Boosting (GBM) model was fit and the out-of-sample accuracy was 0.9624.
 
-The GBM model is then used to predict the 20 different test cases for submission, which is irrelevant and thus not included in this report.
+```{r,eval=FALSE}
+mod3=train(classe~.,method='lda',data=mytrain,verbose=F)
+```
+
+```{r}
+confusionMatrix(predict(mod3,mytest),mytest$classe)
+```
+Third, a Linear Discriminant Analysis (LDA) model was generated and the out-of-sample accuracy was 0.695.
+
+The Random Forest model showed highest accuracy (0.9925) among all three models. The prediction ability may be further improved by combining multiple models (classifiers) into one; however it was not very necessary for this project as the accuracy of Random Forest alone was already 0.9925 and the computational resource of my own PC was limited. Thus the final model was built using Random Forest method.
+
+```{r,eval=FALSE}
+model=train(classe~.,method='rf',data=data,verbose=F)
+```
+
+```{r}
+unkn = read.csv('./pml-testing.csv')
+pred = predict(model,unkn)
+pred
+```
+With the final model, all 20 unknown samples were predicted. All these predictions were found correct later after submission.
+
+```{r,eval=FALSE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(pred)
+```
+The predictions were output to individual files as requested for submission.
+
+EOF
